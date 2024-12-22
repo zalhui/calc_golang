@@ -2,7 +2,6 @@ package application
 
 import (
 	"encoding/json"
-
 	"fmt"
 	"net/http"
 	"os"
@@ -17,9 +16,11 @@ type Config struct {
 func ConfigFromEnv() *Config {
 	config := new(Config)
 	config.Addr = os.Getenv("PORT")
+
 	if config.Addr == "" {
 		config.Addr = "8080"
 	}
+
 	return config
 }
 
@@ -38,32 +39,39 @@ type Request struct {
 }
 
 type Response struct {
-	Result string `json:"result"`
+	Result float64 `json:"result,omitempty"`
+	Error  string  `json:"error,omitempty"`
 }
 
 func CalcHandler(w http.ResponseWriter, r *http.Request) {
-	request := new(Request)
-	defer r.Body.Close()
+	w.Header().Set("Content-Type", "application/json")
 
-	err := json.NewDecoder(r.Body).Decode(request)
+	if r.Method == "POST" {
+		request := new(Request)
+		defer r.Body.Close()
 
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, `{"error": "Internal server error"}`)
-		return
-	}
+		err := json.NewDecoder(r.Body).Decode(request)
 
-	result, err := calculation.Calc(request.Expression)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, `{"error": "Bad request"}`)
+			return
+		}
 
-	if err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		if err == calculation.ErrInvalidExpression || err == calculation.ErrBrackets {
-			fmt.Fprintf(w, `{"error": "Expression is not valid"}`)
+		result, err := calculation.Calc(request.Expression)
+
+		if err != nil {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			responce := Response{Error: err.Error()}
+
+			json.NewEncoder(w).Encode(responce)
 		} else {
-			fmt.Fprintf(w, `{"error": "unknown err"}`)
+			responce := Response{Result: result}
+			json.NewEncoder(w).Encode(responce)
 		}
 	} else {
-		json.NewEncoder(w).Encode(Response{Result: fmt.Sprintf("%f", result)})
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		fmt.Fprintf(w, `{"error": "only POST method allowed"}`)
 	}
 
 }

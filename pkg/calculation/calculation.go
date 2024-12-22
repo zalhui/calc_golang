@@ -66,7 +66,7 @@ func convertToRPN(expression string) ([]string, error) {
 			operators = operators[:len(operators)-1] // удаляем '('
 		default:
 			if !unicode.IsSpace(char) {
-				return nil, ErrInvalidExpression
+				return nil, ErrAllowed
 			}
 		}
 		i++
@@ -91,7 +91,7 @@ func calculateRPN(rpn []string) (float64, error) {
 		switch elem {
 		case "+", "-", "*", "/":
 			if len(stack) < 2 {
-				return 0, ErrInvalidExpression
+				return 0, ErrValues
 			}
 			b, a := stack[len(stack)-1], stack[len(stack)-2]
 			stack = stack[:len(stack)-2]
@@ -114,14 +114,14 @@ func calculateRPN(rpn []string) (float64, error) {
 			// convert string to float64
 			value, err := strconv.ParseFloat(elem, 64)
 			if err != nil {
-				return 0, ErrInvalidExpression
+				return 0, ErrAllowed
 			}
 			stack = append(stack, value)
 		}
 	}
 
 	if len(stack) != 1 {
-		return 0, ErrInvalidExpression
+		return 0, ErrValues
 	}
 
 	return stack[0], nil
