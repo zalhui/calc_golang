@@ -1,8 +1,6 @@
 package calculation
 
 import (
-	"errors"
-	"fmt"
 	"strconv"
 	"unicode"
 )
@@ -63,12 +61,12 @@ func convertToRPN(expression string) ([]string, error) {
 				operators = operators[:len(operators)-1]
 			}
 			if len(operators) == 0 {
-				return nil, errors.New("number of brackets doesn't match")
+				return nil, ErrBrackets
 			}
 			operators = operators[:len(operators)-1] // удаляем '('
 		default:
 			if !unicode.IsSpace(char) {
-				return nil, fmt.Errorf("invalid character: %c", char)
+				return nil, ErrInvalidExpression
 			}
 		}
 		i++
@@ -76,7 +74,7 @@ func convertToRPN(expression string) ([]string, error) {
 
 	for len(operators) > 0 {
 		if operators[len(operators)-1] == '(' {
-			return nil, errors.New("number of brackets doesn't match")
+			return nil, ErrBrackets
 		}
 		rpn = append(rpn, string(operators[len(operators)-1]))
 		operators = operators[:len(operators)-1]
@@ -93,7 +91,7 @@ func calculateRPN(rpn []string) (float64, error) {
 		switch elem {
 		case "+", "-", "*", "/":
 			if len(stack) < 2 {
-				return 0, errors.New("invalid expression: not enough operands")
+				return 0, ErrInvalidExpression
 			}
 			b, a := stack[len(stack)-1], stack[len(stack)-2]
 			stack = stack[:len(stack)-2]
@@ -107,7 +105,7 @@ func calculateRPN(rpn []string) (float64, error) {
 				result = a * b
 			case "/":
 				if b == 0 {
-					return 0, errors.New("division by zero")
+					return 0, ErrDivisionByZero
 				}
 				result = a / b
 			}
@@ -116,14 +114,14 @@ func calculateRPN(rpn []string) (float64, error) {
 			// convert string to float64
 			value, err := strconv.ParseFloat(elem, 64)
 			if err != nil {
-				return 0, fmt.Errorf("incorrect number: %s", elem)
+				return 0, ErrInvalidExpression
 			}
 			stack = append(stack, value)
 		}
 	}
 
 	if len(stack) != 1 {
-		return 0, errors.New("invalid expression")
+		return 0, ErrInvalidExpression
 	}
 
 	return stack[0], nil

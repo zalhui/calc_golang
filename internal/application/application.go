@@ -2,7 +2,7 @@ package application
 
 import (
 	"encoding/json"
-	"errors"
+
 	"fmt"
 	"net/http"
 	"os"
@@ -10,7 +10,7 @@ import (
 	"github.com/zalhui/calc_golang/pkg/calculation"
 )
 
-type Config struct{
+type Config struct {
 	Addr string
 }
 
@@ -33,42 +33,42 @@ func New() *Application {
 	}
 }
 
-type Request struct{
-	Expression string `json:"expression`
+type Request struct {
+	Expression string `json:"expression"`
 }
- 
-func CalcHandler(w http.ResponseWriter, r *http.Request){
-	request:=new(Request)
+
+type Response struct {
+	Result string `json:"result"`
+}
+
+func CalcHandler(w http.ResponseWriter, r *http.Request) {
+	request := new(Request)
 	defer r.Body.Close()
 
-	err:=json.NewDecoder(r.Body).Decode(request)
+	err := json.NewDecoder(r.Body).Decode(request)
 
-	if err!=nil{
-		http.Error(w, err.Error(), http.StatusBadRequest
-		return 
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, `{"error": "Internal server error"}`)
+		return
 	}
 
-	result,err:=calculation.Calc(request.Expression)
+	result, err := calculation.Calc(request.Expression)
 
- 
-
-		if err != nil {
-			errorMessages := map[error]string{
-				calculation.ErrInvalidExpr:    "err:%s",
-				calculation.ErrEmptyExpression: "err:%s",
-				calculation.ErrDivisionByZero: "err:%s",
-			}
-		
-			if msg, ok := errorMessages[err]; ok {
-				fmt.Fprintf(w, msg, err.Error())
-			} else {
-				fmt.Fprintf(w, "unknown err")
-			}
+	if err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		if err == calculation.ErrInvalidExpression || err == calculation.ErrBrackets {
+			fmt.Fprintf(w, `{"error": "Expression is not valid"}`)
+		} else {
+			fmt.Fprintf(w, `{"error": "unknown err"}`)
 		}
-		
+	} else {
+		json.NewEncoder(w).Encode(Response{Result: fmt.Sprintf("%f", result)})
+	}
+
 }
 
-func (a *Application) RunServer() error{
+func (a *Application) RunServer() error {
 	http.HandleFunc("/", CalcHandler)
 	return http.ListenAndServe(":"+a.config.Addr, nil)
 }
