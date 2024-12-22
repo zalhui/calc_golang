@@ -17,47 +17,139 @@
 3. C помощью командной строки клонируйте проект с GitHub
    
     ```
-    git clone https://github.com/nikitakutergin59/RPN
+    git clone https://github.com/zalhui/calc_golang
     ```
 5. Перейдите в директорию с проектом и запустите сервер
     ```
     go run ./...
     ```
 
-## Примеры запросов
+# Работа с сервисом
 
-Создайте новую командную строку и введите команду
+Для работы с данным сервисом используйте командную строку
 
--**Например:**
+**Для корректной работы на Windows необходимо использовать *Git Bash***(устанавливается вместе с Git)
 
-    curl -X POST -H "Content-Type: application/json" -d "{\"expression\": \"52+52\"}" http://localhost:8080
-    
--**вы увидете ответ:**
- 
-    {"result":104}
-  
+Также работа с сервисом вмозожна через Postman. Для работы вставьте в строку для URL адрес:
+```
+http://127.0.0.1:8080/api/v1/calculate
+```
+
+для отправки запроса используйте команду(вместо '...' введите выражение для калькулятора):
+
+```
+curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
+--header 'Content-Type: application/json' \
+--data '{
+    "expression":"..."
+}'
+```
+
+## Примеры работы с сервисом
+### Корректный запрос:
+Введя данный запрос:
+```
+curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
+--header 'Content-Type: application/json' \
+--data '{
+    "expression":"2+2*2/(2+2)"
+}'
+```
+вы получите ответ    
+```
+{"result":3}
+```
 с кодом [200]
 
--**Ещё один пример работы, если вы введёте команду, например:**
+### Запрос с методом не POST:
+Введя данный запрос:
+```
+curl --location --request GET 'http://127.0.0.1:8080/api/v1/calculate' \
+--header 'Content-Type: application/json' \
+--data '{
+    "expression":"2++2"
+}'
+```
+вы получите ответ    
+```
+{"error": "only POST method allowed"}
+```
+с кодом [405]
 
-    curl -X POST -H "Content-Type: application/json" -d "{\"expression\": \"10/0 \"}" http://localhost:8080
-    
--**вы получите ответ:**
+### Запрос с неправильным телом:
+Введя данный запрос:
+```
+curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
+--header 'Content-Type: application/json' \
+--data '{
+    "expression":"2+2
+}'
+```
+вы получите ответ    
+```
+{"error": "Bad request"}
+```
+с кодом [400]
 
-    {"error":"Division by zero"}
-    
+### Запрос с делением на 0(ноль)
+Введя данный запрос:
+```
+curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
+--header 'Content-Type: application/json' \
+--data '{
+    "expression":"2+2*2/0"
+}'
+```
+вы получите ответ    
+```
+{"error":"Expression is not valid. Division by zero"}
+```
 с кодом [422]
 
--**а так же если вы введёте команду например:**
+### Запрос с не закрытой скобкой
+Введя данный запрос:
+```
+curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
+--header 'Content-Type: application/json' \
+--data '{
+    "expression":"2+(9+7"
+}'
+```
+вы получите ответ    
+```
+{"error": "Expression is not valid. Number of brackets doesn't match"}
+```
+с кодом [422]
 
-    curl -X POST -H "Content-Type: application/json" -d "{\"expression\": \"ткцотикзтц9отищзтзтщшкцьтещшцть \"}" http://localhost:8080
-    
-вы получите ответ
+### Запрос с выражением с буквами
+Введя данный запрос:
+```
+curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
+--header 'Content-Type: application/json' \
+--data '{
+    "expression":"2+(9+x)"
+}'
+```
+вы получите ответ    
+```
+{"error": "Expression is not valid. Only numbers and ( ) + - * / allowed"}
+```
+с кодом [422]
 
-    {"error":"Expression is not valid"}
-
-так-же с кодом [422]
-
+### Запрос с выражением c лишними знаками действия
+Введя данный запрос:
+```
+curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
+--header 'Content-Type: application/json' \
+--data '{
+    "expression":"2++2"
+}'
+```
+вы получите ответ    
+```
+{"error": "Expression is not valid. Not enough values"}
+```
+с кодом [422]
 Для остальных ошибок ответ будет
 
     {"error":"Internal server error"}
