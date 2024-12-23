@@ -45,13 +45,13 @@
 
 Также работа с сервисом возможна через Postman. Для работы вставьте в строку для URL адрес:
 ```
-http://127.0.0.1:8080/api/v1/calculate
+http://localhost:8080/api/v1/calculate
 ```
 
 для отправки запроса используйте команду (вместо '...' введите выражение для калькулятора):
 
 ```
-curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
+curl --location 'http://localhost:8080/api/v1/calculate' \
 --header 'Content-Type: application/json' \
 --data '{
     "expression":"..."
@@ -62,7 +62,7 @@ curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
 ### Корректный запрос:
 Введя данный запрос:
 ```
-curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
+curl --location 'http://localhost:8080/api/v1/calculate' \
 --header 'Content-Type: application/json' \
 --data '{
     "expression":"2+2*2/(2+2)"
@@ -77,7 +77,7 @@ curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
 ### Запрос с методом не POST:
 Введя данный запрос:
 ```
-curl --location --request GET 'http://127.0.0.1:8080/api/v1/calculate' \
+curl --location --request GET 'http://localhost:8080/api/v1/calculate' \
 --header 'Content-Type: application/json' \
 --data '{
     "expression":"2+2"
@@ -92,7 +92,7 @@ curl --location --request GET 'http://127.0.0.1:8080/api/v1/calculate' \
 ### Запрос с неправильным телом:
 Введя данный запрос:
 ```
-curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
+curl --location 'http://localhost:8080/api/v1/calculate' \
 --header 'Content-Type: application/json' \
 --data '{
     "expression":"2+2
@@ -107,7 +107,7 @@ curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
 ### Запрос с делением на 0(ноль)
 Введя данный запрос:
 ```
-curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
+curl --location 'http://localhost:8080/api/v1/calculate' \
 --header 'Content-Type: application/json' \
 --data '{
     "expression":"2+2*2/0"
@@ -122,7 +122,7 @@ curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
 ### Запрос с не закрытой скобкой
 Введя данный запрос:
 ```
-curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
+curl --location 'http://localhost:8080/api/v1/calculate' \
 --header 'Content-Type: application/json' \
 --data '{
     "expression":"2+(9+7"
@@ -137,7 +137,7 @@ curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
 ### Запрос с выражением с буквами
 Введя данный запрос:
 ```
-curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
+curl --location 'http://localhost:8080/api/v1/calculate' \
 --header 'Content-Type: application/json' \
 --data '{
     "expression":"2+(9+x)"
@@ -152,7 +152,7 @@ curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
 ### Запрос с выражением c лишними знаками действия
 Введя данный запрос:
 ```
-curl --location 'http://127.0.0.1:8080/api/v1/calculate' \
+curl --location 'http://localhost:8080/api/v1/calculate' \
 --header 'Content-Type: application/json' \
 --data '{
     "expression":"2++2"
