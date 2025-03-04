@@ -3,8 +3,11 @@ package worker
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/zalhui/calc_golang/config"
@@ -30,8 +33,25 @@ func StartWorker() {
 				log.Printf("Error decoding task: %v\n", err)
 				continue
 			}
+			fmt.Printf("Получена задача: %+v\n", task)
 
-			result, err := performOperation(task.Arg1, task.Arg2, task.Operation)
+			// Обработка зависимостей
+			arg1, err := resolveArg(task.Arg1)
+			if err != nil {
+				log.Printf("Error resolving arg1: %v\n", err)
+				submitError(task.ID, err.Error())
+				continue
+			}
+
+			arg2, err := resolveArg(task.Arg2)
+			if err != nil {
+				log.Printf("Error resolving arg2: %v\n", err)
+				submitError(task.ID, err.Error())
+				continue
+			}
+
+			// Выполнение операции
+			result, err := performOperation(arg1, arg2, task.Operation)
 			if err != nil {
 				log.Printf("Error performing operation: %v\n", err)
 				submitError(task.ID, err.Error())
@@ -44,6 +64,52 @@ func StartWorker() {
 		} else {
 			log.Printf("Unexpected status code: %d\n", resp.StatusCode)
 			time.Sleep(time.Second)
+		}
+	}
+}
+
+// resolveArg обрабатывает аргумент задачи
+func resolveArg(arg string) (float64, error) {
+	if isPlaceholder(arg) {
+		// Если аргумент — это плейсхолдер, ждем результат задачи
+		taskID := strings.TrimSuffix(strings.TrimPrefix(arg, "task_"), "_result")
+		return waitForTaskResult(taskID)
+	}
+
+	// Если аргумент — это число, преобразуем его
+	return strconv.ParseFloat(arg, 64)
+}
+
+// isPlaceholder проверяет, является ли аргумент плейсхолдером
+func isPlaceholder(arg string) bool {
+	return strings.HasPrefix(arg, "task_") && strings.HasSuffix(arg, "_result")
+}
+func waitForTaskResult(taskID string) (float64, error) {
+	for {
+		resp, err := http.Get("http://localhost:8080/internal/task/result?id=" + taskID)
+		if err != nil {
+			log.Printf("Error getting task result: %v\n", err)
+			time.Sleep(500 * time.Millisecond) // Ждем перед повторной попыткой
+			continue
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			var resultData struct {
+				Result float64 `json:"result"`
+			}
+			err := json.NewDecoder(resp.Body).Decode(&resultData)
+			resp.Body.Close()
+			if err != nil {
+				log.Printf("Error decoding result: %v\n", err)
+				return 0, err
+			}
+			return resultData.Result, nil
+		} else if resp.StatusCode == http.StatusNotFound {
+			log.Printf("Task %s result not ready, waiting...\n", taskID)
+			time.Sleep(500 * time.Millisecond)
+		} else {
+			log.Printf("Unexpected status code when getting result: %d\n", resp.StatusCode)
+			time.Sleep(500 * time.Millisecond)
 		}
 	}
 }

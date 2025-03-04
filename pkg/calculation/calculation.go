@@ -2,7 +2,6 @@ package calculation
 
 import (
 	"fmt"
-	"strconv"
 
 	//"strconv"
 	"time"
@@ -32,7 +31,7 @@ func ParseExpression(expression string, ExpressionID string) ([]models.Task, err
 	var stack []string
 
 	for _, elem := range rpn {
-		if isOperator(elem) {
+		if isOperator(rune(elem[0])) {
 			if len(stack) < 2 {
 				return nil, ErrValues
 			}
@@ -41,20 +40,11 @@ func ParseExpression(expression string, ExpressionID string) ([]models.Task, err
 
 			taskID := uuid.NewString()
 
-			value1, err := strconv.ParseFloat(arg1, 64)
-			if err != nil {
-				return nil, ErrAllowed
-			}
-
-			value2, err := strconv.ParseFloat(arg2, 64)
-			if err != nil {
-				return nil, ErrAllowed
-			}
 			tasks = append(tasks, models.Task{
 				ID:            taskID,
 				ExpressionID:  ExpressionID,
-				Arg1:          value1,
-				Arg2:          value2,
+				Arg1:          arg1,
+				Arg2:          arg2,
 				Operation:     elem,
 				OperationTime: getOperationTime(elem),
 				Status:        "pending",
@@ -66,11 +56,13 @@ func ParseExpression(expression string, ExpressionID string) ([]models.Task, err
 			stack = append(stack, elem)
 		}
 	}
+	fmt.Printf("Tasks: %+v\n", tasks)
+	fmt.Printf("Stack: %+v\n", stack)
 	return tasks, nil
 }
 
-func isOperator(r string) bool {
-	return r == "+" || r == "-" || r == "*" || r == "/"
+func isOperator(r rune) bool {
+	return r == '+' || r == '-' || r == '*' || r == '/'
 }
 
 func getOperationTime(r string) time.Duration {
@@ -88,17 +80,6 @@ func getOperationTime(r string) time.Duration {
 	return 0
 }
 
-/*func Calc(expression string) (float64, error) {
-	rpn, err := convertToRPN(expression)
-
-	if err != nil {
-		return 0, err
-	}
-
-	return calculateRPN(rpn)
-}*/
-
-// RPN - reverse polish notation
 func convertToRPN(expression string) ([]string, error) {
 	var rpn []string
 	var operators []rune
@@ -155,9 +136,21 @@ func convertToRPN(expression string) ([]string, error) {
 		operators = operators[:len(operators)-1]
 	}
 
-	//fmt.Println(rpn) // Для отладки выводим RPN
+	fmt.Println(rpn) // Для отладки выводим RPN
 	return rpn, nil
 }
+
+/*func Calc(expression string) (float64, error) {
+	rpn, err := convertToRPN(expression)
+
+	if err != nil {
+		return 0, err
+	}
+
+	return calculateRPN(rpn)
+}*/
+
+// RPN - reverse polish notation
 
 /*func calculateRPN(rpn []string) (float64, error) {
 	var stack []float64

@@ -80,7 +80,31 @@ func (a *Application) GetPendingTaskHandler(w http.ResponseWriter, r *http.Reque
 }
 
 func (a *Application) SubmitTaskResultHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
+	if r.Method == http.MethodGet {
+		// Обработка GET-запроса для получения результата задачи
+		taskID := r.URL.Query().Get("id")
+		if taskID == "" {
+			http.Error(w, "Missing task id", http.StatusBadRequest)
+			return
+		}
+
+		// Предположим, что у нас есть метод в репозитории для получения результата задачи:
+		task, found := a.repository.GetTaskByID(taskID)
+		if !found || task.Status != "completed" {
+			http.Error(w, "Task result not ready", http.StatusNotFound)
+			return
+		}
+
+		result := task.Result
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": result,
+		})
+		return
+	}
+
+	if r.Method != http.MethodPost {
 		http.Error(w, "only POST method allowed", http.StatusMethodNotAllowed)
 		return
 	}

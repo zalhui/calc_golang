@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log"
 	"os"
 	"strconv"
 	"time"
@@ -18,11 +19,17 @@ type Config struct {
 
 func LoadConfig() *Config {
 	// загрузка переменных среды из .env файла
+	/*dir, err := os.Getwd()
+	if err != nil {
+		log.Fatalf("Error getting current working directory: %v", err)
+	}
+	log.Println("Current working directory:", dir)*/
+
+	// Загрузка переменных среды из .env файла
 	err := godotenv.Load()
 	if err != nil {
-		panic("Error loading .env file")
+		log.Fatalf("Error loading .env file: %v", err)
 	}
-
 	return &Config{
 		TimeAddition:       getEnvDuration("TIME_ADDITION_MS", 1000),
 		TimeSubtraction:    getEnvDuration("TIME_SUBTRACTION_MS", 1000),

@@ -24,8 +24,8 @@ func (r *Repository) AddExpression(expression *models.Expression) {
 	r.expressions[expression.ID] = expression
 	r.mu.Unlock()
 
-	for _, task := range expression.Tasks {
-		r.tasks[task.ID] = &task
+	for i := range expression.Tasks {
+		r.tasks[expression.Tasks[i].ID] = &expression.Tasks[i]
 	}
 }
 
