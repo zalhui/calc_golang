@@ -2,6 +2,7 @@ package application
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -70,13 +71,19 @@ func (a *Application) GetPendingTaskHandler(w http.ResponseWriter, r *http.Reque
 
 	task, exists := a.repository.GetPendingTask()
 	if !exists {
+		log.Printf("No pending tasks available")
 		http.Error(w, "no pending task", http.StatusNotFound)
 		return
 	}
 
+	log.Printf("Sending task to agent: ID=%s, Arg1=%s, Arg2=%s, Operation=%s, Status=%s",
+		task.ID, task.Arg1, task.Arg2, task.Operation, task.Status)
+
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"task": task})
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{"task": task}); err != nil {
+		log.Printf("Error encoding task %s: %v", task.ID, err)
+	}
 }
 
 func (a *Application) SubmitTaskResultHandler(w http.ResponseWriter, r *http.Request) {
@@ -88,18 +95,15 @@ func (a *Application) SubmitTaskResultHandler(w http.ResponseWriter, r *http.Req
 			return
 		}
 
-		// Предположим, что у нас есть метод в репозитории для получения результата задачи:
 		task, found := a.repository.GetTaskByID(taskID)
 		if !found || task.Status != "completed" {
 			http.Error(w, "Task result not ready", http.StatusNotFound)
 			return
 		}
 
-		result := task.Result
-
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"result": result,
+			"result": task.Result,
 		})
 		return
 	}

@@ -57,7 +57,6 @@ func ParseExpression(expression string, ExpressionID string) ([]models.Task, err
 		}
 	}
 	fmt.Printf("Tasks: %+v\n", tasks)
-	fmt.Printf("Stack: %+v\n", stack)
 	return tasks, nil
 }
 
@@ -139,58 +138,3 @@ func convertToRPN(expression string) ([]string, error) {
 	fmt.Println(rpn) // Для отладки выводим RPN
 	return rpn, nil
 }
-
-/*func Calc(expression string) (float64, error) {
-	rpn, err := convertToRPN(expression)
-
-	if err != nil {
-		return 0, err
-	}
-
-	return calculateRPN(rpn)
-}*/
-
-// RPN - reverse polish notation
-
-/*func calculateRPN(rpn []string) (float64, error) {
-	var stack []float64
-
-	for _, elem := range rpn {
-		switch elem {
-		case "+", "-", "*", "/":
-			if len(stack) < 2 {
-				return 0, ErrValues
-			}
-			b, a := stack[len(stack)-1], stack[len(stack)-2]
-			stack = stack[:len(stack)-2]
-			var result float64
-			switch elem {
-			case "+":
-				result = a + b
-			case "-":
-				result = a - b
-			case "*":
-				result = a * b
-			case "/":
-				if b == 0 {
-					return 0, ErrDivisionByZero
-				}
-				result = a / b
-			}
-			stack = append(stack, result)
-		default:
-			// convert string to float64
-			value, err := strconv.ParseFloat(elem, 64)
-			if err != nil {
-				return 0, ErrAllowed
-			}
-			stack = append(stack, value)
-		}
-	}
-
-	if len(stack) != 1 {
-		return 0, ErrValues
-	}
-
-	return stack[0], nil
-}*/

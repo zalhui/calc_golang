@@ -3,7 +3,6 @@ package worker
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -17,6 +16,10 @@ import (
 
 var cfg = config.LoadConfig()
 
+type TaskResponse struct {
+	Task models.Task `json:"task"`
+}
+
 func StartWorker() {
 	for {
 		resp, err := http.Get("http://localhost:8080/internal/task")
@@ -27,35 +30,46 @@ func StartWorker() {
 		}
 
 		if resp.StatusCode == http.StatusOK {
-			var task models.Task
-			err := json.NewDecoder(resp.Body).Decode(&task)
-			if err != nil {
-				log.Printf("Error decoding task: %v\n", err)
+			var response TaskResponse
+			if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+				log.Printf("Error decoding task response: %v", err)
 				continue
 			}
-			fmt.Printf("Получена задача: %+v\n", task)
+			task := response.Task
+			log.Printf("Received task: ID=%s, ExpressionID=%s, Arg1=%s, Arg2=%s, Operation=%s, Status=%s",
+				task.ID, task.ExpressionID, task.Arg1, task.Arg2, task.Operation, task.Status)
+
+			// Проверка на пустые обязательные поля
+			if task.ID == "" || task.Operation == "" || task.Arg1 == "" || task.Arg2 == "" {
+				log.Printf("Received invalid task with empty fields: %+v", task)
+				continue
+			}
 
 			// Обработка зависимостей
 			arg1, err := resolveArg(task.Arg1)
 			if err != nil {
-				log.Printf("Error resolving arg1: %v\n", err)
+				log.Printf("Error resolving arg1 for task %s: %v", task.ID, err)
 				submitError(task.ID, err.Error())
 				continue
 			}
+			log.Printf("Resolved arg1 for task %s: %f", task.ID, arg1)
 
 			arg2, err := resolveArg(task.Arg2)
 			if err != nil {
-				log.Printf("Error resolving arg2: %v\n", err)
+				log.Printf("Error resolving arg2 for task %s: %v", task.ID, err)
 				submitError(task.ID, err.Error())
 				continue
 			}
+			log.Printf("Resolved arg2 for task %s: %f", task.ID, arg2)
 
 			// Выполнение операции
 			result, err := performOperation(arg1, arg2, task.Operation)
 			if err != nil {
-				log.Printf("Error performing operation: %v\n", err)
+				log.Printf("Error performing operation for task %s: %v", task.ID, err)
 				submitError(task.ID, err.Error())
 			} else {
+				log.Printf("Operation completed for task %s: %s %f %s %f = %f",
+					task.ID, task.Arg1, arg1, task.Operation, arg2, result)
 				submitResult(task.ID, result)
 			}
 		} else if resp.StatusCode == http.StatusNoContent {
@@ -71,13 +85,22 @@ func StartWorker() {
 // resolveArg обрабатывает аргумент задачи
 func resolveArg(arg string) (float64, error) {
 	if isPlaceholder(arg) {
-		// Если аргумент — это плейсхолдер, ждем результат задачи
 		taskID := strings.TrimSuffix(strings.TrimPrefix(arg, "task_"), "_result")
-		return waitForTaskResult(taskID)
+		log.Printf("Resolving placeholder %s for task %s", arg, taskID)
+		result, err := waitForTaskResult(taskID)
+		if err != nil {
+			log.Printf("Failed to resolve placeholder %s: %v", arg, err)
+			return 0, err
+		}
+		return result, nil
 	}
 
-	// Если аргумент — это число, преобразуем его
-	return strconv.ParseFloat(arg, 64)
+	result, err := strconv.ParseFloat(arg, 64)
+	if err != nil {
+		log.Printf("Failed to parse argument %s as float64: %v", arg, err)
+		return 0, err
+	}
+	return result, nil
 }
 
 // isPlaceholder проверяет, является ли аргумент плейсхолдером

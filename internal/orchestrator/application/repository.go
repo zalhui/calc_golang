@@ -1,6 +1,7 @@
 package application
 
 import (
+	"log"
 	"sync"
 
 	"github.com/zalhui/calc_golang/internal/orchestrator/models"
@@ -20,12 +21,16 @@ func NewRepository() *Repository {
 }
 
 func (r *Repository) AddExpression(expression *models.Expression) {
+	log.Printf("Добавление выражения: ID=%s, Задачи=%v\n", expression.ID, expression.Tasks)
+
 	r.mu.Lock()
 	r.expressions[expression.ID] = expression
 	r.mu.Unlock()
 
 	for i := range expression.Tasks {
-		r.tasks[expression.Tasks[i].ID] = &expression.Tasks[i]
+		task := &expression.Tasks[i]
+		log.Printf("Добавление задачи: ID=%s, Arg1=%s, Arg2=%s, Operation=%s\n", task.ID, task.Arg1, task.Arg2, task.Operation)
+		r.tasks[task.ID] = task
 	}
 }
 
