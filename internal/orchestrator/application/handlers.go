@@ -40,15 +40,29 @@ func (a *Application) GetExpressionByIDHandler(w http.ResponseWriter, r *http.Re
 
 	vars := mux.Vars(r)
 	expressionID := vars["id"]
+	if expressionID == "" {
+		http.Error(w, "missing expression ID", http.StatusBadRequest)
+		return
+	}
 
 	expression, exists := a.repository.GetExpressionByID(expressionID)
 	if !exists {
+		log.Printf("GET request failed: expression %s not found", expressionID)
 		http.Error(w, "expression not found", http.StatusNotFound)
 		return
 	}
 
+	dto := ExpressionDTO{
+		ID:     expression.ID,
+		Status: expression.Status,
+		Result: expression.Result,
+	}
+
+	log.Printf("Returning expression %s with status %s and result %f", expressionID, dto.Status, dto.Result)
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{"expression": expression})
+	jsonData, _ := json.MarshalIndent(map[string]interface{}{"expression": dto}, "", "    ")
+	w.Write(jsonData)
 }
 
 func (a *Application) GetAllExpressionsHandler(w http.ResponseWriter, r *http.Request) {
@@ -58,9 +72,19 @@ func (a *Application) GetAllExpressionsHandler(w http.ResponseWriter, r *http.Re
 	}
 
 	expressions := a.repository.GetAllExpressions()
+	var dtos []ExpressionDTO
+	for _, expr := range expressions {
+		dtos = append(dtos, ExpressionDTO{
+			ID:     expr.ID,
+			Status: expr.Status,
+			Result: expr.Result,
+		})
+	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{"expressions": expressions})
+	jsonData, _ := json.MarshalIndent(map[string]interface{}{"expressions": dtos}, "", "    ")
+	w.Write(jsonData)
 }
 
 func (a *Application) GetPendingTaskHandler(w http.ResponseWriter, r *http.Request) {
@@ -88,15 +112,16 @@ func (a *Application) GetPendingTaskHandler(w http.ResponseWriter, r *http.Reque
 
 func (a *Application) SubmitTaskResultHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
-		// Обработка GET-запроса для получения результата задачи
 		taskID := r.URL.Query().Get("id")
 		if taskID == "" {
+			log.Printf("Missing task ID in GET request")
 			http.Error(w, "Missing task id", http.StatusBadRequest)
 			return
 		}
 
 		task, found := a.repository.GetTaskByID(taskID)
 		if !found || task.Status != "completed" {
+			log.Printf("Task %s result not ready or not found", taskID)
 			http.Error(w, "Task result not ready", http.StatusNotFound)
 			return
 		}
@@ -120,15 +145,25 @@ func (a *Application) SubmitTaskResultHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Error decoding task result: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	if req.ID == "" {
+		log.Printf("Missing task ID in POST request")
+		http.Error(w, "Missing task ID", http.StatusBadRequest)
+		return
+	}
+
 	if req.Error != "" {
+		log.Printf("Task %s failed with error: %s", req.ID, req.Error)
 		a.repository.UpdateTaskStatus(req.ID, "error", 0)
 	} else {
+		log.Printf("Task %s completed with result: %f", req.ID, req.Result)
 		a.repository.UpdateTaskStatus(req.ID, "completed", req.Result)
 	}
 
 	w.WriteHeader(http.StatusOK)
+	log.Printf("Successfully processed result for task %s", req.ID)
 }

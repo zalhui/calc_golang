@@ -2,6 +2,7 @@ package calculation
 
 import (
 	"fmt"
+	"strings"
 
 	//"strconv"
 	"time"
@@ -24,7 +25,7 @@ func ParseExpression(expression string, ExpressionID string) ([]models.Task, err
 	rpn, err := convertToRPN(expression)
 
 	if err != nil {
-		return nil, fmt.Errorf("error converting expression to RPN: %w", err)
+		return nil, fmt.Errorf("error converting expression to RPN : %w", err)
 	}
 
 	var tasks []models.Task
@@ -40,6 +41,17 @@ func ParseExpression(expression string, ExpressionID string) ([]models.Task, err
 
 			taskID := uuid.NewString()
 
+			// Определяем зависимости
+			var dependencies []string
+			if isPlaceholder(arg1) {
+				depID := extractTaskID(arg1)
+				dependencies = append(dependencies, depID)
+			}
+			if isPlaceholder(arg2) {
+				depID := extractTaskID(arg2)
+				dependencies = append(dependencies, depID)
+			}
+
 			tasks = append(tasks, models.Task{
 				ID:            taskID,
 				ExpressionID:  ExpressionID,
@@ -48,6 +60,7 @@ func ParseExpression(expression string, ExpressionID string) ([]models.Task, err
 				Operation:     elem,
 				OperationTime: getOperationTime(elem),
 				Status:        "pending",
+				Dependencies:  dependencies, // Заполняем зависимости
 			})
 
 			resultPlaceholder := fmt.Sprintf("task_%s_result", taskID)
@@ -58,6 +71,14 @@ func ParseExpression(expression string, ExpressionID string) ([]models.Task, err
 	}
 	fmt.Printf("Tasks: %+v\n", tasks)
 	return tasks, nil
+}
+
+func isPlaceholder(arg string) bool {
+	return strings.HasPrefix(arg, "task_") && strings.HasSuffix(arg, "_result")
+}
+
+func extractTaskID(placeholder string) string {
+	return strings.TrimSuffix(strings.TrimPrefix(placeholder, "task_"), "_result")
 }
 
 func isOperator(r rune) bool {

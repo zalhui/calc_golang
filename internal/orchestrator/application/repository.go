@@ -69,12 +69,21 @@ func (r *Repository) GetPendingTask() (*models.Task, bool) {
 	defer r.mu.RUnlock()
 
 	for _, task := range r.tasks {
-		if task.Status == "pending" {
+		if task.Status == "pending" && r.allDependenciesCompleted(task.Dependencies) {
 			return task, true
 		}
 	}
-
 	return nil, false
+}
+
+func (r *Repository) allDependenciesCompleted(dependencies []string) bool {
+	for _, depID := range dependencies {
+		depTask, exists := r.tasks[depID]
+		if !exists || depTask.Status != "completed" {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *Repository) UpdateTaskStatus(taskID string, status string, result float64) {
@@ -84,6 +93,55 @@ func (r *Repository) UpdateTaskStatus(taskID string, status string, result float
 	task, exists := r.tasks[taskID]
 	if exists {
 		task.Status = status
-		task.Result = result
+		if status == "completed" {
+			task.Result = result
+		} else if status == "error" {
+			// Обновляем статус выражения на "error"
+			for _, expr := range r.expressions {
+				for _, t := range expr.Tasks {
+					if t.ID == taskID {
+						expr.Status = "error"
+						break
+					}
+				}
+			}
+		}
 	}
+}
+
+func (r *Repository) UpdateExpressionStatus(expressionID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	expression, exists := r.expressions[expressionID]
+	if !exists {
+		log.Printf("Expression %s not found in repository", expressionID)
+		return
+	}
+
+	allCompleted := true
+	for _, task := range expression.Tasks {
+		storedTask, found := r.tasks[task.ID]
+		if !found || storedTask.Status != "completed" {
+			allCompleted = false
+			break
+		}
+	}
+
+	if allCompleted {
+		// Берем результат из последней задачи
+		lastTaskID := expression.Tasks[len(expression.Tasks)-1].ID
+		if lastTask, found := r.tasks[lastTaskID]; found {
+			expression.Status = "completed"
+			expression.Result = lastTask.Result
+			log.Printf("Expression %s updated to completed with result: %f", expressionID, lastTask.Result)
+		} else {
+			log.Printf("Last task %s not found for expression %s", lastTaskID, expressionID)
+		}
+	} else {
+		expression.Status = "pending"
+		log.Printf("Expression %s remains pending", expressionID)
+	}
+
+	r.expressions[expressionID] = expression
 }

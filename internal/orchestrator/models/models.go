@@ -18,4 +18,5 @@ type Task struct {
 	OperationTime time.Duration `json:"operation_time"`
 	Status        string        `json:"status"`
 	Result        float64       `json:"result,omitempty"`
+	Dependencies  []string      `json:"dependencies"`
 }

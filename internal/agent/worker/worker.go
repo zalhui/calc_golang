@@ -24,10 +24,11 @@ func StartWorker() {
 	for {
 		resp, err := http.Get("http://localhost:8080/internal/task")
 		if err != nil {
-			log.Printf("Error getting task: %v\n", err)
+			log.Printf("Error getting task: %v", err)
 			time.Sleep(time.Second)
 			continue
 		}
+		defer resp.Body.Close()
 
 		if resp.StatusCode == http.StatusOK {
 			var response TaskResponse
@@ -39,13 +40,11 @@ func StartWorker() {
 			log.Printf("Received task: ID=%s, ExpressionID=%s, Arg1=%s, Arg2=%s, Operation=%s, Status=%s",
 				task.ID, task.ExpressionID, task.Arg1, task.Arg2, task.Operation, task.Status)
 
-			// Проверка на пустые обязательные поля
 			if task.ID == "" || task.Operation == "" || task.Arg1 == "" || task.Arg2 == "" {
 				log.Printf("Received invalid task with empty fields: %+v", task)
 				continue
 			}
 
-			// Обработка зависимостей
 			arg1, err := resolveArg(task.Arg1)
 			if err != nil {
 				log.Printf("Error resolving arg1 for task %s: %v", task.ID, err)
@@ -62,7 +61,6 @@ func StartWorker() {
 			}
 			log.Printf("Resolved arg2 for task %s: %f", task.ID, arg2)
 
-			// Выполнение операции
 			result, err := performOperation(arg1, arg2, task.Operation)
 			if err != nil {
 				log.Printf("Error performing operation for task %s: %v", task.ID, err)
@@ -72,11 +70,11 @@ func StartWorker() {
 					task.ID, task.Arg1, arg1, task.Operation, arg2, result)
 				submitResult(task.ID, result)
 			}
-		} else if resp.StatusCode == http.StatusNoContent {
+		} else if resp.StatusCode == http.StatusNotFound {
 			log.Println("No tasks found, waiting for 1 second...")
 			time.Sleep(time.Second)
 		} else {
-			log.Printf("Unexpected status code: %d\n", resp.StatusCode)
+			log.Printf("Unexpected status code: %d", resp.StatusCode)
 			time.Sleep(time.Second)
 		}
 	}
@@ -146,7 +144,7 @@ func performOperation(arg1, arg2 float64, operation string) (float64, error) {
 		result = arg1 + arg2
 		<-time.After(cfg.TimeAddition)
 	case "-":
-		result = arg1 - arg2
+		result = arg2 - arg1
 		<-time.After(cfg.TimeSubtraction)
 	case "*":
 		result = arg1 * arg2
@@ -171,19 +169,21 @@ func submitResult(taskID string, result float64) {
 	}
 	jsonData, err := json.Marshal(data)
 	if err != nil {
-		log.Printf("Error marshaling result: %v\n", err)
+		log.Printf("Error marshaling result: %v", err)
 		return
 	}
 
 	resp, err := http.Post("http://localhost:8080/internal/task/result", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
-		log.Printf("Error submitting result: %v\n", err)
+		log.Printf("Error submitting result for task %s: %v", taskID, err)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("Unexpected status code when submitting result: %d\n", resp.StatusCode)
+		log.Printf("Failed to submit result for task %s, status code: %d", taskID, resp.StatusCode)
+	} else {
+		log.Printf("Successfully submitted result for task %s: %f", taskID, result)
 	}
 }
 
@@ -194,18 +194,20 @@ func submitError(taskID string, errorMsg string) {
 	}
 	jsonData, err := json.Marshal(data)
 	if err != nil {
-		log.Printf("Error marshaling error: %v\n", err)
+		log.Printf("Error marshaling error: %v", err)
 		return
 	}
 
 	resp, err := http.Post("http://localhost:8080/internal/task/result", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
-		log.Printf("Error submitting error: %v\n", err)
+		log.Printf("Error submitting error for task %s: %v", taskID, err)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("Unexpected status code when submitting error: %d\n", resp.StatusCode)
+		log.Printf("Failed to submit error for task %s, status code: %d", taskID, resp.StatusCode)
+	} else {
+		log.Printf("Successfully submitted error for task %s: %s", taskID, errorMsg)
 	}
 }
