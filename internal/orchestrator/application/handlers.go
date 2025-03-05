@@ -51,8 +51,12 @@ func (a *Application) GetExpressionByIDHandler(w http.ResponseWriter, r *http.Re
 		http.Error(w, "expression not found", http.StatusNotFound)
 		return
 	}
-
-	log.Printf("Returning expression %s with status %s and result %f", expressionID, expression.Status, expression.Result)
+	log.Printf("Before JSON encoding: Expression %s, Status=%s, Result=%f",
+		expressionID, expression.Status, expression.Result)
+	// Принудительно обновим статус перед сериализацией (для теста)
+	a.repository.UpdateExpressionStatus(expressionID)
+	log.Printf("After forced update: Expression %s, Status=%s, Result=%f",
+		expressionID, expression.Status, expression.Result)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	jsonData, _ := json.MarshalIndent(map[string]interface{}{"expression": expression}, "", "    ")
