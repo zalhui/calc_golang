@@ -52,16 +52,10 @@ func (a *Application) GetExpressionByIDHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	dto := ExpressionDTO{
-		ID:     expression.ID,
-		Status: expression.Status,
-		Result: expression.Result,
-	}
-
-	log.Printf("Returning expression %s with status %s and result %f", expressionID, dto.Status, dto.Result)
+	log.Printf("Returning expression %s with status %s and result %f", expressionID, expression.Status, expression.Result)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	jsonData, _ := json.MarshalIndent(map[string]interface{}{"expression": dto}, "", "    ")
+	jsonData, _ := json.MarshalIndent(map[string]interface{}{"expression": expression}, "", "    ")
 	w.Write(jsonData)
 }
 
@@ -72,18 +66,10 @@ func (a *Application) GetAllExpressionsHandler(w http.ResponseWriter, r *http.Re
 	}
 
 	expressions := a.repository.GetAllExpressions()
-	var dtos []ExpressionDTO
-	for _, expr := range expressions {
-		dtos = append(dtos, ExpressionDTO{
-			ID:     expr.ID,
-			Status: expr.Status,
-			Result: expr.Result,
-		})
-	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	jsonData, _ := json.MarshalIndent(map[string]interface{}{"expressions": dtos}, "", "    ")
+	jsonData, _ := json.MarshalIndent(map[string]interface{}{"expressions": expressions}, "", "    ")
 	w.Write(jsonData)
 }
 
@@ -160,7 +146,7 @@ func (a *Application) SubmitTaskResultHandler(w http.ResponseWriter, r *http.Req
 		log.Printf("Task %s failed with error: %s", req.ID, req.Error)
 		a.repository.UpdateTaskStatus(req.ID, "error", 0)
 	} else {
-		log.Printf("Task %s completed with result: %f", req.ID, req.Result)
+		log.Printf("Task %s completed with result: %f, calling UpdateTaskStatus", req.ID, req.Result)
 		a.repository.UpdateTaskStatus(req.ID, "completed", req.Result)
 	}
 

@@ -27,10 +27,9 @@ func (r *Repository) AddExpression(expression *models.Expression) {
 	r.expressions[expression.ID] = expression
 	r.mu.Unlock()
 
-	for i := range expression.Tasks {
-		task := &expression.Tasks[i]
+	for _, task := range expression.Tasks { // task уже является указателем
 		log.Printf("Добавление задачи: ID=%s, Arg1=%s, Arg2=%s, Operation=%s\n", task.ID, task.Arg1, task.Arg2, task.Operation)
-		r.tasks[task.ID] = task
+		r.tasks[task.ID] = task // Сохраняем указатель
 	}
 }
 
@@ -109,6 +108,7 @@ func (r *Repository) UpdateTaskStatus(taskID string, status string, result float
 	}
 }
 
+// repository.go
 func (r *Repository) UpdateExpressionStatus(expressionID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -120,6 +120,8 @@ func (r *Repository) UpdateExpressionStatus(expressionID string) {
 	}
 
 	allCompleted := true
+
+	// Проверяем статусы задач напрямую из r.tasks
 	for _, task := range expression.Tasks {
 		storedTask, found := r.tasks[task.ID]
 		if !found || storedTask.Status != "completed" {
@@ -129,7 +131,7 @@ func (r *Repository) UpdateExpressionStatus(expressionID string) {
 	}
 
 	if allCompleted {
-		// Берем результат из последней задачи
+		// Получаем последнюю задачу выражения
 		lastTaskID := expression.Tasks[len(expression.Tasks)-1].ID
 		if lastTask, found := r.tasks[lastTaskID]; found {
 			expression.Status = "completed"

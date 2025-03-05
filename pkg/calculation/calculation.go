@@ -21,14 +21,14 @@ var priority = map[rune]int{
 	'(': 0,
 }
 
-func ParseExpression(expression string, ExpressionID string) ([]models.Task, error) {
+func ParseExpression(expression string, ExpressionID string) ([]*models.Task, error) {
 	rpn, err := convertToRPN(expression)
 
 	if err != nil {
 		return nil, fmt.Errorf("error converting expression to RPN : %w", err)
 	}
 
-	var tasks []models.Task
+	var tasks []*models.Task
 	var stack []string
 
 	for _, elem := range rpn {
@@ -52,7 +52,7 @@ func ParseExpression(expression string, ExpressionID string) ([]models.Task, err
 				dependencies = append(dependencies, depID)
 			}
 
-			tasks = append(tasks, models.Task{
+			tasks = append(tasks, &models.Task{
 				ID:            taskID,
 				ExpressionID:  ExpressionID,
 				Arg1:          arg1,
