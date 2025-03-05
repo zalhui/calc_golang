@@ -18,14 +18,7 @@ type Config struct {
 }
 
 func LoadConfig() *Config {
-	// загрузка переменных среды из .env файла
-	/*dir, err := os.Getwd()
-	if err != nil {
-		log.Fatalf("Error getting current working directory: %v", err)
-	}
-	log.Println("Current working directory:", dir)*/
 
-	// Загрузка переменных среды из .env файла
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatalf("Error loading .env file: %v", err)

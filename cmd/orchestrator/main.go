@@ -11,10 +11,8 @@ import (
 func main() {
 	app := application.New()
 
-	// Создаем маршрутизатор
 	router := mux.NewRouter()
 
-	// Регистрируем обработчики с маршрутами
 	router.HandleFunc("/api/v1/calculate", app.AddExpressionHandler).Methods("POST")
 	router.HandleFunc("/api/v1/expressions", app.GetAllExpressionsHandler).Methods("GET")
 	router.HandleFunc("/api/v1/expressions/{id}", app.GetExpressionByIDHandler).Methods("GET") // Используем {id} для динамического параметра
@@ -22,5 +20,5 @@ func main() {
 	router.HandleFunc("/internal/task/result", app.SubmitTaskResultHandler).Methods("POST", "GET")
 
 	log.Printf("Orchestrator started on :8080")
-	log.Fatal(http.ListenAndServe(":8080", router)) // Используем маршрутизатор вместо nil
+	log.Fatal(http.ListenAndServe(":8080", router))
 }

@@ -15,5 +15,5 @@ func main() {
 	}
 
 	log.Printf("Agent started with %d workers\n", cfg.ComputingPower)
-	select {} // Бесконечный цикл, чтобы main не завершился
+	select {}
 }

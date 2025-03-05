@@ -45,12 +45,11 @@ func (a *Application) GetPendingTask() (*models.Task, bool) {
 	return a.repository.GetPendingTask()
 }
 
-// application.go
 func (a *Application) UpdateTaskStatus(taskID string, status string, result float64) {
 	a.repository.UpdateTaskStatus(taskID, status, result)
 
 	r := a.repository
-	r.mu.Lock() // Используем Lock вместо RLock для гарантии консистентности
+	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if task, found := r.tasks[taskID]; found {

@@ -79,7 +79,6 @@ func StartWorker() {
 	}
 }
 
-// resolveArg обрабатывает аргумент задачи
 func resolveArg(arg string) (float64, error) {
 	if isPlaceholder(arg) {
 		taskID := strings.TrimSuffix(strings.TrimPrefix(arg, "task_"), "_result")
@@ -100,7 +99,6 @@ func resolveArg(arg string) (float64, error) {
 	return result, nil
 }
 
-// isPlaceholder проверяет, является ли аргумент плейсхолдером
 func isPlaceholder(arg string) bool {
 	return strings.HasPrefix(arg, "task_") && strings.HasSuffix(arg, "_result")
 }
@@ -109,7 +107,7 @@ func waitForTaskResult(taskID string) (float64, error) {
 		resp, err := http.Get("http://localhost:8080/internal/task/result?id=" + taskID)
 		if err != nil {
 			log.Printf("Error getting task result: %v\n", err)
-			time.Sleep(500 * time.Millisecond) // Ждем перед повторной попыткой
+			time.Sleep(500 * time.Millisecond)
 			continue
 		}
 

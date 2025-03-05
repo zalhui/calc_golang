@@ -53,7 +53,7 @@ func (a *Application) GetExpressionByIDHandler(w http.ResponseWriter, r *http.Re
 	}
 	log.Printf("Before JSON encoding: Expression %s, Status=%s, Result=%f",
 		expressionID, expression.Status, expression.Result)
-	// Принудительно обновим статус перед сериализацией (для теста)
+
 	a.repository.UpdateExpressionStatus(expressionID)
 	log.Printf("After forced update: Expression %s, Status=%s, Result=%f",
 		expressionID, expression.Status, expression.Result)

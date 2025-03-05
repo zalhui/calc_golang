@@ -41,7 +41,6 @@ func ParseExpression(expression string, ExpressionID string) ([]*models.Task, er
 
 			taskID := uuid.NewString()
 
-			// Определяем зависимости
 			var dependencies []string
 			if isPlaceholder(arg1) {
 				depID := extractTaskID(arg1)
@@ -60,7 +59,7 @@ func ParseExpression(expression string, ExpressionID string) ([]*models.Task, er
 				Operation:     elem,
 				OperationTime: getOperationTime(elem),
 				Status:        "pending",
-				Dependencies:  dependencies, // Заполняем зависимости
+				Dependencies:  dependencies,
 			})
 
 			resultPlaceholder := fmt.Sprintf("task_%s_result", taskID)
