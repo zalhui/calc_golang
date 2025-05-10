@@ -2,17 +2,18 @@ package application
 
 import (
 	"github.com/google/uuid"
-	"github.com/zalhui/calc_golang/internal/orchestrator/models"
+	"github.com/zalhui/calc_golang/internal/common/models"
+	"github.com/zalhui/calc_golang/internal/orchestrator/repository"
 	"github.com/zalhui/calc_golang/pkg/calculation"
 )
 
 type Application struct {
-	repository *Repository
+	repository *repository.Repository
 }
 
 func New() *Application {
 	return &Application{
-		repository: NewRepository(),
+		repository: repository.NewRepository(),
 	}
 }
 
@@ -47,15 +48,4 @@ func (a *Application) GetPendingTask() (*models.Task, bool) {
 
 func (a *Application) UpdateTaskStatus(taskID string, status string, result float64) {
 	a.repository.UpdateTaskStatus(taskID, status, result)
-
-	r := a.repository
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if task, found := r.tasks[taskID]; found {
-		exprID := task.ExpressionID
-		if _, exists := r.expressions[exprID]; exists {
-			a.repository.UpdateExpressionStatus(exprID)
-		}
-	}
 }

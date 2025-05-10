@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/zalhui/calc_golang/config"
-	"github.com/zalhui/calc_golang/internal/orchestrator/models"
+	"github.com/zalhui/calc_golang/internal/common/models"
 	"github.com/zalhui/calc_golang/pkg/calculation"
 )
 

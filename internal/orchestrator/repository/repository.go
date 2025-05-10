@@ -1,10 +1,10 @@
-package application
+package repository
 
 import (
 	"log"
 	"sync"
 
-	"github.com/zalhui/calc_golang/internal/orchestrator/models"
+	"github.com/zalhui/calc_golang/internal/common/models"
 )
 
 type Repository struct {
@@ -90,19 +90,49 @@ func (r *Repository) UpdateTaskStatus(taskID string, status string, result float
 	defer r.mu.Unlock()
 
 	task, exists := r.tasks[taskID]
-	if exists {
-		task.Status = status
-		if status == "completed" {
-			task.Result = result
-		} else if status == "error" {
+	if !exists {
+		log.Printf("Task %s not found", taskID)
+		return
+	}
 
-			for _, expr := range r.expressions {
-				for _, t := range expr.Tasks {
-					if t.ID == taskID {
-						expr.Status = "error"
-						break
-					}
+	task.Status = status
+	if status == "completed" {
+		task.Result = result
+	} else if status == "error" {
+		for _, expr := range r.expressions {
+			for _, t := range expr.Tasks {
+				if t.ID == taskID {
+					expr.Status = "error"
+					break
 				}
+			}
+		}
+	}
+
+	// Обновление статуса выражения
+	if task.ExpressionID != "" {
+		expr, exists := r.expressions[task.ExpressionID]
+		if exists {
+			allCompleted := true
+			for _, t := range expr.Tasks {
+				storedTask, found := r.tasks[t.ID]
+				if !found || storedTask.Status != "completed" {
+					allCompleted = false
+					break
+				}
+			}
+			if allCompleted {
+				lastTaskID := expr.Tasks[len(expr.Tasks)-1].ID
+				if lastTask, found := r.tasks[lastTaskID]; found {
+					expr.Status = "completed"
+					expr.Result = lastTask.Result
+					log.Printf("Expression %s updated to completed with result: %f", task.ExpressionID, lastTask.Result)
+				} else {
+					log.Printf("Last task %s not found for expression %s", lastTaskID, task.ExpressionID)
+				}
+			} else {
+				expr.Status = "pending"
+				log.Printf("Expression %s remains pending", task.ExpressionID)
 			}
 		}
 	}

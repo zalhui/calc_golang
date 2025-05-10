@@ -15,6 +15,7 @@ type Config struct {
 	TimeMultiplication time.Duration
 	TimeDivision       time.Duration
 	ComputingPower     int
+	JWTSecret          string
 }
 
 func LoadConfig() *Config {
@@ -29,6 +30,7 @@ func LoadConfig() *Config {
 		TimeMultiplication: getEnvDuration("TIME_MULTIPLICATIONS_MS", 1000),
 		TimeDivision:       getEnvDuration("TIME_DIVISIONS_MS", 1000),
 		ComputingPower:     getEnvInt("COMPUTING_POWER", 1),
+		JWTSecret:          os.Getenv("JWT_SECRET"),
 	}
 }
 

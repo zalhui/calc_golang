@@ -1,9 +1,9 @@
-package application
+package repository
 
 import (
 	"testing"
 
-	"github.com/zalhui/calc_golang/internal/orchestrator/models"
+	"github.com/zalhui/calc_golang/internal/common/models"
 )
 
 func TestAddExpression(t *testing.T) {
