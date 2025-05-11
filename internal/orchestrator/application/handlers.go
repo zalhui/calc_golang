@@ -2,129 +2,181 @@ package application
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/zalhui/calc_golang/internal/auth"
 )
 
-func (a *Application) AddExpressionHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, "only POST method allowed", http.StatusMethodNotAllowed)
+func (a *Application) RegisterHandler(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Login    string `json:"login"`
+		Password string `json:"password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request format", http.StatusBadRequest)
 		return
 	}
+
+	if req.Login == "" || req.Password == "" {
+		http.Error(w, "Login and password are required", http.StatusBadRequest)
+		return
+	}
+
+	_, err := auth.RegisterUser(a.db, req.Login, req.Password)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+func (a *Application) LoginHandler(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Login    string `json:"login"`
+		Password string `json:"password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request format", http.StatusBadRequest)
+		return
+	}
+
+	token, err := auth.LoginUser(a.db, req.Login, req.Password)
+	if err != nil {
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"token": token})
+}
+
+func (a *Application) AddExpressionHandler(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value("userID").(string)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	var req struct {
 		Expression string `json:"expression"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid request format", http.StatusBadRequest)
 		return
 	}
 
-	expressionID, err := a.AddExpression(req.Expression)
+	expressionID, err := a.AddExpression(req.Expression, userID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{"id": expressionID})
+	json.NewEncoder(w).Encode(map[string]string{
+		"id":      expressionID,
+		"status":  "pending",
+		"message": "Expression accepted for processing",
+	})
 }
 
 func (a *Application) GetExpressionByIDHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
-		http.Error(w, "only GET method allowed", http.StatusMethodNotAllowed)
+	userID, ok := r.Context().Value("userID").(string)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
 	vars := mux.Vars(r)
 	expressionID := vars["id"]
 	if expressionID == "" {
-		http.Error(w, "missing expression ID", http.StatusBadRequest)
+		http.Error(w, "Missing expression ID", http.StatusBadRequest)
 		return
 	}
 
-	expression, exists := a.repository.GetExpressionByID(expressionID)
+	expression, exists := a.repository.GetExpressionByID(expressionID, userID)
 	if !exists {
-		log.Printf("GET request failed: expression %s not found", expressionID)
-		http.Error(w, "expression not found", http.StatusNotFound)
+		http.Error(w, "Expression not found", http.StatusNotFound)
 		return
 	}
-	log.Printf("Before JSON encoding: Expression %s, Status=%s, Result=%f",
-		expressionID, expression.Status, expression.Result)
-
-	a.repository.UpdateExpressionStatus(expressionID)
-	log.Printf("After forced update: Expression %s, Status=%s, Result=%f",
-		expressionID, expression.Status, expression.Result)
+	var result interface{}
+	if expression.Result.Valid {
+		result = expression.Result.Float64
+	} else {
+		result = nil
+	}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	jsonData, _ := json.MarshalIndent(map[string]interface{}{"expression": expression}, "", "    ")
-	w.Write(jsonData)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"id":      expression.ID,
+		"status":  expression.Status,
+		"result":  result,
+		"created": expression.CreatedAt,
+	})
 }
 
 func (a *Application) GetAllExpressionsHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
-		http.Error(w, "only GET method allowed", http.StatusMethodNotAllowed)
+	userID, ok := r.Context().Value("userID").(string)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	expressions := a.repository.GetAllExpressions()
+	expressions := a.repository.GetAllExpressions(userID)
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	jsonData, _ := json.MarshalIndent(map[string]interface{}{"expressions": expressions}, "", "    ")
-	w.Write(jsonData)
+	response := make([]map[string]interface{}, 0, len(expressions))
+	for _, expr := range expressions {
+		response = append(response, map[string]interface{}{
+			"id":      expr.ID,
+			"status":  expr.Status,
+			"result":  expr.Result,
+			"created": expr.CreatedAt,
+		})
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"expressions": response})
 }
 
 func (a *Application) GetPendingTaskHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
-		http.Error(w, "only GET method allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	task, exists := a.repository.GetPendingTask()
 	if !exists {
-		log.Printf("No pending tasks available")
-		http.Error(w, "no pending task", http.StatusNotFound)
+		http.Error(w, "No tasks available", http.StatusNotFound)
 		return
 	}
 
-	log.Printf("Sending task to agent: ID=%s, Arg1=%s, Arg2=%s, Operation=%s, Status=%s",
-		task.ID, task.Arg1, task.Arg2, task.Operation, task.Status)
-
-	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{"task": task}); err != nil {
-		log.Printf("Error encoding task %s: %v", task.ID, err)
-	}
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"task": map[string]interface{}{
+			"id":            task.ID,
+			"expression_id": task.ExpressionID,
+			"arg1":          task.Arg1,
+			"arg2":          task.Arg2,
+			"operation":     task.Operation,
+		},
+	})
 }
 
 func (a *Application) SubmitTaskResultHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		taskID := r.URL.Query().Get("id")
 		if taskID == "" {
-			log.Printf("Missing task ID in GET request")
-			http.Error(w, "Missing task id", http.StatusBadRequest)
+			http.Error(w, "Missing task ID", http.StatusBadRequest)
 			return
 		}
 
 		task, found := a.repository.GetTaskByID(taskID)
 		if !found || task.Status != "completed" {
-			log.Printf("Task %s result not ready or not found", taskID)
-			http.Error(w, "Task result not ready", http.StatusNotFound)
+			http.Error(w, "Result not ready", http.StatusNotFound)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"result": task.Result,
 		})
-		return
-	}
-
-	if r.Method != http.MethodPost {
-		http.Error(w, "only POST method allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -135,25 +187,34 @@ func (a *Application) SubmitTaskResultHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Error decoding task result: %v", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if req.ID == "" {
-		log.Printf("Missing task ID in POST request")
-		http.Error(w, "Missing task ID", http.StatusBadRequest)
+		http.Error(w, "Invalid request format", http.StatusBadRequest)
 		return
 	}
 
 	if req.Error != "" {
-		log.Printf("Task %s failed with error: %s", req.ID, req.Error)
 		a.repository.UpdateTaskStatus(req.ID, "error", 0)
 	} else {
-		log.Printf("Task %s completed with result: %f, calling UpdateTaskStatus", req.ID, req.Result)
 		a.repository.UpdateTaskStatus(req.ID, "completed", req.Result)
 	}
 
 	w.WriteHeader(http.StatusOK)
-	log.Printf("Successfully processed result for task %s", req.ID)
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+func (a *Application) GetUserHistoryHandler(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value("userID").(string)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	history, err := a.repository.GetUserHistory(userID)
+	if err != nil {
+		http.Error(w, "Failed to get history", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"history": history})
+
 }

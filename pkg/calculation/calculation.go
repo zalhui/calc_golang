@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/zalhui/calc_golang/config"
-	"github.com/zalhui/calc_golang/internal/orchestrator/models"
+	"github.com/zalhui/calc_golang/internal/common/models"
 )
 
 var priority = map[rune]int{

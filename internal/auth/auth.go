@@ -36,8 +36,11 @@ func RegisterUser(db *sql.DB, login, password string) (string, error) {
 
 func LoginUser(db *sql.DB, login, password string) (string, error) {
 	var user User
-	err := db.QueryRow("SELECT id, login, password_hash FROM users WHERE login = ?", login).Scan(&user.ID, &user.PasswordHash)
+	err := db.QueryRow("SELECT id, login, password_hash FROM users WHERE login = ?", login).Scan(&user.ID, &user.Login, &user.PasswordHash)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", fmt.Errorf("user not found")
+		}
 		return "", fmt.Errorf("failed to query user: %w", err)
 	}
 

@@ -16,4 +16,8 @@ func main() {
 
 	log.Printf("Agent started with %d workers\n", cfg.ComputingPower)
 	select {}
+
+	//defer log.Println("Shutting down agent...")
+	//defer log.Println("Agent stopped")
+	//cancel()
 }

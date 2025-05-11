@@ -1,84 +1,207 @@
 package repository
 
 import (
+	"database/sql"
+	"fmt"
 	"log"
-	"sync"
+	"strings"
+	"time"
 
 	"github.com/zalhui/calc_golang/internal/common/models"
 )
 
 type Repository struct {
-	expressions map[string]*models.Expression
-	tasks       map[string]*models.Task
-	mu          sync.RWMutex
+	db *sql.DB
 }
 
-func NewRepository() *Repository {
-	return &Repository{
-		expressions: make(map[string]*models.Expression),
-		tasks:       make(map[string]*models.Task),
+func NewRepository(db *sql.DB) *Repository {
+	return &Repository{db: db}
+}
+
+func (r *Repository) AddExpression(expr *models.Expression) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-}
 
-func (r *Repository) AddExpression(expression *models.Expression) {
-	log.Printf("Добавление выражения: ID=%s, Задачи=%v\n", expression.ID, expression.Tasks)
-
-	r.mu.Lock()
-	r.expressions[expression.ID] = expression
-	r.mu.Unlock()
-
-	for _, task := range expression.Tasks {
-		log.Printf("Добавление задачи: ID=%s, Arg1=%s, Arg2=%s, Operation=%s\n", task.ID, task.Arg1, task.Arg2, task.Operation)
-		r.tasks[task.ID] = task
+	_, err = tx.Exec(
+		"INSERT INTO expressions (id, user_id, expression, status, created_at) VALUES (?, ?, ?, ?, ?)",
+		expr.ID, expr.UserID, expr.Expression, expr.Status, time.Now(),
+	)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to insert expression: %w", err)
 	}
+
+	// Вставляем задачи
+	for _, task := range expr.Tasks {
+		deps := strings.Join(task.Dependencies, ",")
+		_, err = tx.Exec(
+			"INSERT INTO tasks (id, expression_id, arg1, arg2, operation, status, dependencies, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+			task.ID, expr.ID, task.Arg1, task.Arg2, task.Operation, task.Status, deps, time.Now(),
+		)
+		if err != nil {
+			tx.Rollback()
+			return fmt.Errorf("failed to insert task: %w", err)
+		}
+	}
+
+	return tx.Commit()
 }
 
-func (r *Repository) GetExpressionByID(expressionID string) (*models.Expression, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+func (r *Repository) GetExpressionByID(expressionID, userID string) (*models.Expression, bool) {
+	row := r.db.QueryRow(
+		`SELECT id, user_id, expression, 
+		status, result, created_at FROM 
+		expressions WHERE id = ? AND user_id = ?`,
+		expressionID, userID,
+	)
 
-	expression, exists := r.expressions[expressionID]
+	var expr models.Expression
+	var createdAt time.Time
+	err := row.Scan(
+		&expr.ID,
+		&expr.UserID,
+		&expr.Expression,
+		&expr.Status,
+		&expr.Result,
+		&createdAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, false
+		}
+		log.Printf("Error getting expression: %v", err)
+		return nil, false
+	}
+	expr.CreatedAt = createdAt
 
-	return expression, exists
+	// Получаем связанные задачи
+	tasks, err := r.getTasksForExpression(expr.ID)
+	if err != nil {
+		log.Printf("Error getting tasks: %v", err)
+		return nil, false
+	}
+	expr.Tasks = tasks
+
+	return &expr, true
 }
-func (r *Repository) GetAllExpressions() []*models.Expression {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
 
-	expressions := make([]*models.Expression, 0, len(r.expressions))
+func (r *Repository) GetAllExpressions(userID string) []*models.Expression {
+	rows, err := r.db.Query(
+		`SELECT id, expression, status, result, 
+		created_at FROM expressions WHERE user_id = ?
+		 ORDER BY created_at DESC`,
+		userID,
+	)
+	if err != nil {
+		log.Printf("Error querying expressions: %v", err)
+		return nil
+	}
+	defer rows.Close()
 
-	for _, expression := range r.expressions {
-		expressions = append(expressions, expression)
+	var expressions []*models.Expression
+	for rows.Next() {
+		var expr models.Expression
+		var createdAt time.Time
+		err := rows.Scan(
+			&expr.ID,
+			&expr.Expression,
+			&expr.Status,
+			&expr.Result,
+			&createdAt,
+		)
+		if err != nil {
+			log.Printf("Error scanning expression: %v", err)
+			continue
+		}
+		expr.UserID = userID
+		expr.CreatedAt = createdAt
+		expressions = append(expressions, &expr)
 	}
 
 	return expressions
 }
 
 func (r *Repository) GetTaskByID(taskID string) (*models.Task, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	row := r.db.QueryRow(
+		`SELECT id, expression_id, arg1, arg2, 
+		operation, status, result, dependencies 
+		FROM tasks WHERE id = ?`,
+		taskID,
+	)
 
-	task, exists := r.tasks[taskID]
+	var task models.Task
+	var deps string
+	err := row.Scan(
+		&task.ID,
+		&task.ExpressionID,
+		&task.Arg1,
+		&task.Arg2,
+		&task.Operation,
+		&task.Status,
+		&task.Result,
+		&deps,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, false
+		}
+		log.Printf("Error getting task: %v", err)
+		return nil, false
+	}
 
-	return task, exists
+	task.Dependencies = strings.Split(deps, ",")
+	return &task, true
 }
 
 func (r *Repository) GetPendingTask() (*models.Task, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	for _, task := range r.tasks {
-		if task.Status == "pending" && r.allDependenciesCompleted(task.Dependencies) {
-			return task, true
-		}
+	rows, err := r.db.Query(
+		`SELECT id, expression_id, arg1, arg2, 
+		operation, dependencies FROM tasks 
+		WHERE status = 'pending'`,
+	)
+	if err != nil {
+		log.Printf("Error querying pending tasks: %v", err)
+		return nil, false
 	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var task models.Task
+		var deps string
+		err := rows.Scan(
+			&task.ID,
+			&task.ExpressionID,
+			&task.Arg1,
+			&task.Arg2,
+			&task.Operation,
+			&deps,
+		)
+		if err != nil {
+			log.Printf("Error scanning task: %v", err)
+			continue
+		}
+		task.Dependencies = strings.Split(deps, ",")
+		task.Status = "pending"
+
+		//if r.allDependenciesCompleted(task.Dependencies) {
+		return &task, true
+		//}
+	}
+
 	return nil, false
 }
 
 func (r *Repository) allDependenciesCompleted(dependencies []string) bool {
 	for _, depID := range dependencies {
-		depTask, exists := r.tasks[depID]
-		if !exists || depTask.Status != "completed" {
+		var status string
+		err := r.db.QueryRow(
+			"SELECT status FROM tasks WHERE id = ?",
+			depID,
+		).Scan(&status)
+
+		if err != nil || status != "completed" {
 			return false
 		}
 	}
@@ -86,92 +209,131 @@ func (r *Repository) allDependenciesCompleted(dependencies []string) bool {
 }
 
 func (r *Repository) UpdateTaskStatus(taskID string, status string, result float64) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	task, exists := r.tasks[taskID]
-	if !exists {
-		log.Printf("Task %s not found", taskID)
+	tx, err := r.db.Begin()
+	if err != nil {
+		log.Printf("Error starting transaction: %v", err)
 		return
 	}
 
-	task.Status = status
-	if status == "completed" {
-		task.Result = result
-	} else if status == "error" {
-		for _, expr := range r.expressions {
-			for _, t := range expr.Tasks {
-				if t.ID == taskID {
-					expr.Status = "error"
-					break
-				}
-			}
+	// Обновляем статус задачи
+	_, err = tx.Exec(
+		"UPDATE tasks SET status = ?, result = ? WHERE id = ?",
+		status, result, taskID,
+	)
+	if err != nil {
+		tx.Rollback()
+		log.Printf("Error updating task status: %v", err)
+		return
+	}
+
+	// Получаем expression_id для обновления статуса выражения
+	var expressionID string
+	err = tx.QueryRow(
+		"SELECT expression_id FROM tasks WHERE id = ?",
+		taskID,
+	).Scan(&expressionID)
+	if err != nil {
+		tx.Rollback()
+		log.Printf("Error getting expression ID: %v", err)
+		return
+	}
+
+	// Проверяем все ли задачи выражения выполнены
+	var pendingTasks int
+	err = tx.QueryRow(
+		`SELECT COUNT(*) FROM tasks WHERE 
+		expression_id = ? AND status != 'completed'`,
+		expressionID,
+	).Scan(&pendingTasks)
+
+	if err != nil {
+		tx.Rollback()
+		log.Printf("Error checking pending tasks: %v", err)
+		return
+	}
+
+	if pendingTasks == 0 {
+		// Обновляем статус выражения
+		_, err = tx.Exec(
+			"UPDATE expressions SET status = 'completed', result = ? WHERE id = ?",
+			result, expressionID,
+		)
+		if err != nil {
+			tx.Rollback()
+			log.Printf("Error updating expression status: %v", err)
+			return
 		}
 	}
 
-	// Обновление статуса выражения
-	if task.ExpressionID != "" {
-		expr, exists := r.expressions[task.ExpressionID]
-		if exists {
-			allCompleted := true
-			for _, t := range expr.Tasks {
-				storedTask, found := r.tasks[t.ID]
-				if !found || storedTask.Status != "completed" {
-					allCompleted = false
-					break
-				}
-			}
-			if allCompleted {
-				lastTaskID := expr.Tasks[len(expr.Tasks)-1].ID
-				if lastTask, found := r.tasks[lastTaskID]; found {
-					expr.Status = "completed"
-					expr.Result = lastTask.Result
-					log.Printf("Expression %s updated to completed with result: %f", task.ExpressionID, lastTask.Result)
-				} else {
-					log.Printf("Last task %s not found for expression %s", lastTaskID, task.ExpressionID)
-				}
-			} else {
-				expr.Status = "pending"
-				log.Printf("Expression %s remains pending", task.ExpressionID)
-			}
-		}
+	if err = tx.Commit(); err != nil {
+		log.Printf("Error committing transaction: %v", err)
 	}
 }
 
-func (r *Repository) UpdateExpressionStatus(expressionID string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	expression, exists := r.expressions[expressionID]
-	if !exists {
-		log.Printf("Expression %s not found in repository", expressionID)
-		return
+func (r *Repository) getTasksForExpression(expressionID string) ([]*models.Task, error) {
+	rows, err := r.db.Query(
+		`SELECT id, arg1, arg2, operation, status, 
+		result, dependencies FROM tasks WHERE expression_id = ?`,
+		expressionID,
+	)
+	if err != nil {
+		return nil, err
 	}
+	defer rows.Close()
 
-	allCompleted := true
-
-	for _, task := range expression.Tasks {
-		storedTask, found := r.tasks[task.ID]
-		if !found || storedTask.Status != "completed" {
-			allCompleted = false
-			break
+	var tasks []*models.Task
+	for rows.Next() {
+		var task models.Task
+		var deps string
+		err := rows.Scan(
+			&task.ID,
+			&task.Arg1,
+			&task.Arg2,
+			&task.Operation,
+			&task.Status,
+			&task.Result,
+			&deps,
+		)
+		if err != nil {
+			return nil, err
 		}
+		task.ExpressionID = expressionID
+		task.Dependencies = strings.Split(deps, ",")
+		tasks = append(tasks, &task)
 	}
 
-	if allCompleted {
+	return tasks, nil
+}
 
-		lastTaskID := expression.Tasks[len(expression.Tasks)-1].ID
-		if lastTask, found := r.tasks[lastTaskID]; found {
-			expression.Status = "completed"
-			expression.Result = lastTask.Result
-			log.Printf("Expression %s updated to completed with result: %f", expressionID, lastTask.Result)
-		} else {
-			log.Printf("Last task %s not found for expression %s", lastTaskID, expressionID)
+func (r *Repository) GetUserHistory(userID string) ([]*models.Expression, error) {
+	rows, err := r.db.Query(
+		`SELECT id, expression, status, result, created_at 
+		FROM expressions WHERE user_id = ? ORDER BY created_at DESC`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var history []*models.Expression
+	for rows.Next() {
+		var expr models.Expression
+		var createdAt time.Time
+		err := rows.Scan(
+			&expr.ID,
+			&expr.Expression,
+			&expr.Status,
+			&expr.Result,
+			&createdAt,
+		)
+		if err != nil {
+			return nil, err
 		}
-	} else {
-		expression.Status = "pending"
-		log.Printf("Expression %s remains pending", expressionID)
+		expr.UserID = userID
+		expr.CreatedAt = createdAt
+		history = append(history, &expr)
 	}
 
-	r.expressions[expressionID] = expression
+	return history, nil
 }

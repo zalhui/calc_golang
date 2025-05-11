@@ -3,6 +3,7 @@ package worker
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -15,6 +16,8 @@ import (
 )
 
 var cfg = config.LoadConfig()
+
+//httpClient = &http.Client{Timeout: 30 * time.Second}
 
 type TaskResponse struct {
 	Task models.Task `json:"task"`
@@ -113,7 +116,10 @@ func waitForTaskResult(taskID string) (float64, error) {
 
 		if resp.StatusCode == http.StatusOK {
 			var resultData struct {
-				Result float64 `json:"result"`
+				Result struct {
+					Float64 float64 `json:"Float64"`
+					Valid   bool    `json:"Valid"`
+				} `json:"result"`
 			}
 			err := json.NewDecoder(resp.Body).Decode(&resultData)
 			resp.Body.Close()
@@ -121,7 +127,10 @@ func waitForTaskResult(taskID string) (float64, error) {
 				log.Printf("Error decoding result: %v\n", err)
 				return 0, err
 			}
-			return resultData.Result, nil
+			if !resultData.Result.Valid {
+				return 0, fmt.Errorf("result is not valid")
+			}
+			return resultData.Result.Float64, nil
 		} else if resp.StatusCode == http.StatusNotFound {
 			log.Printf("Task %s result not ready, waiting...\n", taskID)
 			time.Sleep(500 * time.Millisecond)
