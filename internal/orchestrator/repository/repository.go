@@ -241,8 +241,8 @@ func (r *Repository) UpdateTaskStatus(taskID string, status string, result float
 	// Проверяем все ли задачи выражения выполнены
 	var pendingTasks int
 	err = tx.QueryRow(
-		`SELECT COUNT(*) FROM tasks WHERE 
-		expression_id = ? AND status != 'completed'`,
+		`SELECT COUNT(*) FROM tasks WHERE expression_id = ? 
+		AND status NOT IN ('completed', 'error')`,
 		expressionID,
 	).Scan(&pendingTasks)
 
@@ -253,10 +253,32 @@ func (r *Repository) UpdateTaskStatus(taskID string, status string, result float
 	}
 
 	if pendingTasks == 0 {
-		// Обновляем статус выражения
+		exprStatus := "completed"
+		var finalResult float64
+
+		// Проверяем наличие ошибок в задачах
+		var errorTasks int
+		err = tx.QueryRow(
+			`SELECT COUNT(*) FROM tasks WHERE 
+        expression_id = ? AND status = 'error'`,
+			expressionID,
+		).Scan(&errorTasks)
+		if err != nil {
+			tx.Rollback()
+			log.Printf("Error checking error tasks: %v", err)
+			return
+		}
+
+		if errorTasks > 0 {
+			exprStatus = "error"
+			finalResult = 0 // или другое значение по умолчанию
+		} else {
+			finalResult = result
+		}
+
 		_, err = tx.Exec(
-			"UPDATE expressions SET status = 'completed', result = ? WHERE id = ?",
-			result, expressionID,
+			"UPDATE expressions SET status = ?, result = ? WHERE id = ?",
+			exprStatus, finalResult, expressionID,
 		)
 		if err != nil {
 			tx.Rollback()

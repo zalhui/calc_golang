@@ -156,10 +156,10 @@ func performOperation(arg1, arg2 float64, operation string) (float64, error) {
 		result = arg1 * arg2
 		<-time.After(cfg.TimeMultiplication)
 	case "/":
-		if arg2 == 0 {
+		if arg1 == 0 {
 			return 0, calculation.ErrDivisionByZero
 		}
-		result = arg1 / arg2
+		result = arg2 / arg1
 		<-time.After(cfg.TimeDivision)
 	default:
 		return 0, calculation.ErrAllowed
