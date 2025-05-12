@@ -348,29 +348,27 @@ error converting expression to RPN : expression is not valid. number of brackets
 ### 10. Запрос с недопустимыми символами
 Запрос:
 ```
-curl -X POST 'http://localhost:8080/api/v1/calculate' 
-
---header 'Content-Type: application/json' 
-
+curl --location 'http://localhost:8080/api/v1/calculate' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NDcxMTY3NjUsInVzZXJfaWQiOiJiZjcxYzk3Mi05ZDg3LTRlYWItODg1NS04ZTRhNjY0NDM2ZmUifQ.XpIiMNs6Z-8i0Ps7yQXBAQYlx92A5iWvV7b-Zj8-Xw4' \
 --data '{
-"expression": "2+x"
+    "expression":"2+x"
 }'
 ```
 Ответ:
 ```
-expression is not valid. only numbers and ( ) + - * / allowed
+error converting expression to RPN : expression is not valid. only numbers and ( ) + - * / allowed
 ```
 Код: `[422]`
 
 ### 11. Запрос с недостаточным количеством значений
 Запрос:
 ```
-curl -X POST 'http://localhost:8080/api/v1/calculate' 
-
---header 'Content-Type: application/json' 
-
+curl --location 'http://localhost:8080/api/v1/calculate' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NDcxMTY3NjUsInVzZXJfaWQiOiJiZjcxYzk3Mi05ZDg3LTRlYWItODg1NS04ZTRhNjY0NDM2ZmUifQ.XpIiMNs6Z-8i0Ps7yQXBAQYlx92A5iWvV7b-Zj8-Xw4' \
 --data '{
-"expression": "2++2"
+    "expression":"2++2"
 }'
 ```
 Ответ:
@@ -382,11 +380,16 @@ expression is not valid. not enough values
 ### 12. Запрос выражения по несуществующему ID
 Запрос:
 ```
-curl 'http://localhost:8080/api/v1/expressions/12345'
+curl --location 'http://localhost:8080/api/v1/calculate' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NDcxMTY3NjUsInVzZXJfaWQiOiJiZjcxYzk3Mi05ZDg3LTRlYWItODg1NS04ZTRhNjY0NDM2ZmUifQ.XpIiMNs6Z-8i0Ps7yQXBAQYlx92A5iWvV7b-Zj8-Xw4' \
+--data '{
+    "expression":"2++2"
+}'
 ```
 Ответ:
 ```
-expression not found
+Expression not found
 ```
 Код: `[404]`
 **В случае иной ошибки на стороне сервера будет получен ответ:**
