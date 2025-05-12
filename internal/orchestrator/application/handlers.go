@@ -112,10 +112,11 @@ func (a *Application) GetExpressionByIDHandler(w http.ResponseWriter, r *http.Re
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"id":      expression.ID,
-		"status":  expression.Status,
-		"result":  result,
-		"created": expression.CreatedAt,
+		"id":         expression.ID,
+		"expression": expression.Expression,
+		"status":     expression.Status,
+		"result":     result,
+		"created":    expression.CreatedAt,
 	})
 }
 
@@ -132,10 +133,11 @@ func (a *Application) GetAllExpressionsHandler(w http.ResponseWriter, r *http.Re
 	response := make([]map[string]interface{}, 0, len(expressions))
 	for _, expr := range expressions {
 		response = append(response, map[string]interface{}{
-			"id":      expr.ID,
-			"status":  expr.Status,
-			"result":  expr.Result,
-			"created": expr.CreatedAt,
+			"id":         expr.ID,
+			"expression": expr.Expression,
+			"status":     expr.Status,
+			"result":     expr.Result,
+			"created":    expr.CreatedAt,
 		})
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"expressions": response})
