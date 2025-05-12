@@ -5,12 +5,17 @@
 ## Описание
 Проект `calc_golang` — это веб-сервис, который вычисляет арифметические выражения с положительными числами, скобками и операциями `+`, `-`, `*`, `/`. Выражения обрабатываются асинхронно с использованием системы задач, что позволяет параллельно вычислять части сложных выражений. Сервис предоставляет REST API для отправки выражений, получения их статуса и результатов, а также просмотра всех сохраненных выражений.
 
+В последней версии проекта реализована регистрация и аутентификация пользователей, а также персистентность, что позволяет хранить данные о пользователях и выражениях после завершения работы сервиса.
+
+В качестве СУБД в данном проекте используется SQLlite.
+
 Сервис разделен на две части:
 
 - Сервер, который принимает арифметическое выражение, переводит его в набор последовательных задач и обеспечивает порядок их выполнения. Далее будем называть его оркестратором.
 - Вычислитель, который может получить от оркестратора задачу, выполнить его и вернуть серверу результат. Далее будем называть его агентом.
 
 Основные возможности сервиса:
+- Регистрация и аутентификация пользователя через POST-запросы к `/api/v1/register` и `/api/v1/login`.
 - Отправка выражения на вычисление через POST-запрос к `/api/v1/calculate`.
 - Получение статуса и результата конкретного выражения по его ID через GET-запрос к `/api/v1/expressions/{id}`.
 - Получение списка всех выражений через GET-запрос к `/api/v1/expressions`.
@@ -49,11 +54,15 @@
 ## Структура проекта
 
 - `cmd/` - директория с файлами `orchestrator/main.go` и `agent/main.go` для запуска оркестратора и агента.
-- `internal/orchestrator/application/` - код оркестратора (сервер), который принимает запросы, распределяет задачи и возвращает результаты.
-- `internal/orchestrator/models/` - структуры данных для выражений и задач.
+- `config/` - конфигурация сервиса.
 - `internal/agent/worker/` - код агента, выполняющего вычисления задач.
+- `internal/auth/` - логика регистации и аутентификации.
+- `internal/common/models/` - структуры данных для выражений и задач.
+- `internal/db` - описание схем базы данных.
+- `internal/middleware` - middleware для проверки аутентификации.
+- `internal/orchestrator/application/` - логика и хэндлеры оркестратора (сервер), который принимает запросы, распределяет задачи и возвращает результаты.
+- `internal/orchestrator/repository` - логика работы с бд.
 - `pkg/calculation/` - логика перевода выражений в обратную польскую запись, парсинга выражений и преобразования их в задачи.
-- `pkg/config/` - конфигурация сервиса.
 - `.env` - файл с переменными среды(время операций и вычислительная мощность).
 
 ## Запуск
@@ -104,7 +113,31 @@ go run ./cmd/agent/main.go
 
 ### Основные эндпоинты
 
-1. **Отправка выражения на вычисление**  
+1. **Регистрация пользователя**  
+URL: `http://localhost:8080/api/v1/register`  
+Метод: `POST`  
+Тело запроса:
+```
+{
+    "login":"ваш_логин",
+    "password":"ваш_пароль"
+}
+```
+Ответ: статус операции.
+
+1. **Регистрация пользователя**  
+URL: `http://localhost:8080/api/v1/login`  
+Метод: `POST`  
+Тело запроса:
+```
+{
+    "login":"ваш_логин",
+    "password":"ваш_пароль"
+}
+```
+Ответ: персональный JWT токен.
+
+3. **Отправка выражения на вычисление**  
 URL: `http://localhost:8080/api/v1/calculate`  
 Метод: `POST`  
 Тело запроса:
@@ -115,175 +148,204 @@ URL: `http://localhost:8080/api/v1/calculate`
 ```
 Ответ: ID выражения для последующего отслеживания.
 
-2. **Получение статуса и результата выражения**  
+4. **Получение статуса и результата выражения**  
 URL: `http://localhost:8080/api/v1/expressions/{id}`  
 Метод: `GET`  
-Ответ: полная информация о выражении, включая статус, результат (если вычислено), а также инормацию о всех подвыражениях, от которых оно зависит.
+Ответ: полная информация о выражении, включая статус, результат (если вычислено).
 
-3. **Получение списка всех выражений**  
+5. **Получение списка всех выражений**  
 URL: `http://localhost:8080/api/v1/expressions`  
 Метод: `GET`  
-Ответ: список всех выражений с их статусами, результатами и зависимостями.
+Ответ: список всех выражений с их статусами и результатами.
 
 ## Примеры работы с сервисом
 
 *Примеры приведены для командной строки Git Bash.*
 
-### 1. Корректный запрос на вычисление
+### 1. Корректный запрос на регистрацию
 Запрос:
 
 ```
-url -X POST 'http://localhost:8080/api/v1/calculate' 
-
---header 'Content-Type: application/json' 
-
+curl --location 'http://localhost:8080/api/v1/register' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NDcxMTQyMDEsInVzZXJfaWQiOiI2NDRkZTRhYi0yNzgwLTRmZTAtODczMC0xY2VlYWUxNTgyOTUifQ.5qW_h9TrjlroWnP9nKfkx47AKvUAsPOnDYbGmGfq4lM' \
 --data '{
-"expression": "2+2*2"
+    "login":"user1",
+    "password":"1"
 }'
 ```
 Ответ:
 ```
-{"id": "de9b328c-52a7-4454-b41f-9d7bef6ff24e"}
+{"status":"success"}
+```
+Код: `[200]`
+
+### 2. Корректный запрос на аутентификацию
+Запрос:
+
+```
+curl --location 'http://localhost:8080/api/v1/login' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NDcxMTQyMDEsInVzZXJfaWQiOiI2NDRkZTRhYi0yNzgwLTRmZTAtODczMC0xY2VlYWUxNTgyOTUifQ.5qW_h9TrjlroWnP9nKfkx47AKvUAsPOnDYbGmGfq4lM' \
+--data '{
+    "login":"user1",
+    "password":"1"
+}'
+```
+Ответ:
+```
+{
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NDcxMTY3NjUsInVzZXJfaWQiOiJiZjcxYzk3Mi05ZDg3LTRlYWItODg1NS04ZTRhNjY0NDM2ZmUifQ.XpIiMNs6Z-8i0Ps7yQXBAQYlx92A5iWvV7b-Zj8-Xw4"
+}
+```
+Код: `[200]`
+
+*В ПОСЛЕДУЮЩИХ ЗАПРОСАХ НЕОБХОДИМО ИСПОЛЬЗОВАТЬ ДАННЫЙ ТОКЕН В ЗАГОЛОВКЕ ЗАПРОСА ПО КЛЮЧУ Authorization со значением "Bearer {ваш токен}"*
+
+### 3. Корректный запрос на вычисление
+Запрос:
+
+```
+curl --location 'http://localhost:8080/api/v1/calculate' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NDcxMTY3NjUsInVzZXJfaWQiOiJiZjcxYzk3Mi05ZDg3LTRlYWItODg1NS04ZTRhNjY0NDM2ZmUifQ.XpIiMNs6Z-8i0Ps7yQXBAQYlx92A5iWvV7b-Zj8-Xw4' \
+--data '{
+    "expression":"2+2*2"
+}'
+```
+Ответ:
+```
+{"id":"6a451ccb-36ba-4045-a3dd-a21f7beb45dd","message":"Expression accepted for processing","status":"pending"}
+
 ```
 Код: `[201]`
 
-### 2. Получение результата выражения
+### 4. Получение результата выражения
 Запрос (через несколько секунд, чтобы вычисления завершились):
 ```
-curl 'http://localhost:8080/api/v1/expressions/de9b328c-52a7-4454-b41f-9d7bef6ff24e'
+curl --location 'http://localhost:8080/api/v1/expressions/6a451ccb-36ba-4045-a3dd-a21f7beb45dd' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NDcxMTY3NjUsInVzZXJfaWQiOiJiZjcxYzk3Mi05ZDg3LTRlYWItODg1NS04ZTRhNjY0NDM2ZmUifQ.XpIiMNs6Z-8i0Ps7yQXBAQYlx92A5iWvV7b-Zj8-Xw4'
 ```
 *Результат выражения лежит в поле "result":*
 
 Ответ:
 ```
 {
-"expression": {
-"id": "de9b328c-52a7-4454-b41f-9d7bef6ff24e",
-"status": "completed",
-"result": 6,
-"tasks": [
-{
-"id": "c154a023-b86c-4ae5-8a49-2cd2c3f89616",
-"expression_id": "de9b328c-52a7-4454-b41f-9d7bef6ff24e",
-"arg1": "2",
-"arg2": "2",
-"operation": "*",
-"operation_time": 1000000000,
-"status": "completed",
-"result": 4,
-"dependencies": null
-},
-{
-"id": "c03a4806-336a-4d80-82d1-12069b5389c5",
-"expression_id": "de9b328c-52a7-4454-b41f-9d7bef6ff24e",
-"arg1": "task_c154a023-b86c-4ae5-8a49-2cd2c3f89616_result",
-"arg2": "2",
-"operation": "+",
-"operation_time": 1000000000,
-"status": "completed",
-"result": 6,
-"dependencies": ["c154a023-b86c-4ae5-8a49-2cd2c3f89616"]
-}
-]
-}
+    "created": "2025-05-12T09:15:49.1191212+03:00",
+    "expression": "2+2*2",
+    "id": "6a451ccb-36ba-4045-a3dd-a21f7beb45dd",
+    "result": 6,
+    "status": "completed"
 }
 ```
 
 Код: `[200]`
 
-### 3. Получение списка всех выражений
+### 5. Получение списка всех выражений
 Запрос:
-```
-curl 'http://localhost:8080/api/v1/expressions'
+```curl --location 'http://localhost:8080/api/v1/expressions' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NDcxMTY3NjUsInVzZXJfaWQiOiJiZjcxYzk3Mi05ZDg3LTRlYWItODg1NS04ZTRhNjY0NDM2ZmUifQ.XpIiMNs6Z-8i0Ps7yQXBAQYlx92A5iWvV7b-Zj8-Xw4'
 ```
 
 ```
 Ответ (пример с одним выражением):
 {
-"expressions": [
-{
-"id": "de9b328c-52a7-4454-b41f-9d7bef6ff24e",
-"status": "completed",
-"result": 6,
-"tasks": [
-// ... (аналогично предыдущему примеру)
-]
-}
-]
+    "expressions": [
+        {
+            "created": "2025-05-12T09:15:49.1191212+03:00",
+            "expression": "2+2*2",
+            "id": "6a451ccb-36ba-4045-a3dd-a21f7beb45dd",
+            "result": {
+                "Float64": 6,
+                "Valid": true
+            },
+            "status": "completed"
+        }
+    ]
 }
 ```
 
 Код: `[200]`
 
-### 4. Запрос с неправильным методом (не POST)
+### 6. Запрос с неправильным методом (не POST)
 Запрос:
 ```
-curl -X GET 'http://localhost:8080/api/v1/calculate' 
-
---header 'Content-Type: application/json' 
-
+curl --location --request GET 'http://localhost:8080/api/v1/calculate' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NDcxMTY3NjUsInVzZXJfaWQiOiJiZjcxYzk3Mi05ZDg3LTRlYWItODg1NS04ZTRhNjY0NDM2ZmUifQ.XpIiMNs6Z-8i0Ps7yQXBAQYlx92A5iWvV7b-Zj8-Xw4' \
 --data '{
-"expression": "2+2"
+    "expression":"2+2*2"
 }'
 ```
 Ответ:
 ```
-only POST method allowed
+404 page not found
 ```
-Код: `[405]`
-### 5. Запрос с некорректным телом
+Код: `[404]`
+### 7. Запрос с некорректным телом
 Запрос:
 ```
-curl -X POST 'http://localhost:8080/api/v1/calculate' 
-
---header 'Content-Type: application/json' 
-
+curl --location 'http://localhost:8080/api/v1/calculate' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NDcxMTY3NjUsInVzZXJfaWQiOiJiZjcxYzk3Mi05ZDg3LTRlYWItODg1NS04ZTRhNjY0NDM2ZmUifQ.XpIiMNs6Z-8i0Ps7yQXBAQYlx92A5iWvV7b-Zj8-Xw4' \
 --data '{
-"expression": "2+2
+    "expression":"2+2*2
 }'
 ```
 Ответ:
 ```
-invalid character '\n' in string literal
+Invalid request format
 ```
 Код: `[400]`
 
-### 6. Запрос с делением на ноль
+### 8. Запрос с делением на ноль
 Запрос:
 ```
-curl -X POST 'http://localhost:8080/api/v1/calculate' 
-
---header 'Content-Type: application/json' 
-
+curl --location 'http://localhost:8080/api/v1/calculate' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NDcxMTY3NjUsInVzZXJfaWQiOiJiZjcxYzk3Mi05ZDg3LTRlYWItODg1NS04ZTRhNjY0NDM2ZmUifQ.XpIiMNs6Z-8i0Ps7yQXBAQYlx92A5iWvV7b-Zj8-Xw4' \
 --data '{
-"expression": "2/0"
+    "expression":"2/0"
 }'
 ```
 Ответ:
 ```
-expression is not valid. division by zero
-```
-Код: `[422]`
+{"id":"48c2f8cb-a5ed-4ef6-8129-6d60e374b8f6","message":"Expression accepted for processing","status":"pending"}
 
-### 7. Запрос с несовпадающими скобками
+```
+Код: `[201]`
+
+При запросе данного выражения по айди получим ответ:
+```
+{
+    "created": "2025-05-12T09:24:10.6219323+03:00",
+    "expression": "2/0",
+    "id": "48c2f8cb-a5ed-4ef6-8129-6d60e374b8f6",
+    "result": 0,
+    "status": "error"
+}
+```
+В поле status находится ошибка, что свидетельствует о том, что невалидное выражение не считается сервером.
+### 9. Запрос с несовпадающими скобками
 Запрос:
 ```
-curl -X POST 'http://localhost:8080/api/v1/calculate' 
-
---header 'Content-Type: application/json' 
-
+curl --location 'http://localhost:8080/api/v1/calculate' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NDcxMTY3NjUsInVzZXJfaWQiOiJiZjcxYzk3Mi05ZDg3LTRlYWItODg1NS04ZTRhNjY0NDM2ZmUifQ.XpIiMNs6Z-8i0Ps7yQXBAQYlx92A5iWvV7b-Zj8-Xw4' \
 --data '{
-"expression": "2+(3+4"
+    "expression":"2+(3"
 }'
 ```
 Ответ:
 ```
-expression is not valid. number of brackets doesn't match
+error converting expression to RPN : expression is not valid. number of brackets doesn't match
 ```
 
 Код: `[422]`
 
-### 8. Запрос с недопустимыми символами
+### 10. Запрос с недопустимыми символами
 Запрос:
 ```
 curl -X POST 'http://localhost:8080/api/v1/calculate' 
@@ -300,7 +362,7 @@ expression is not valid. only numbers and ( ) + - * / allowed
 ```
 Код: `[422]`
 
-### 9. Запрос с недостаточным количеством значений
+### 11. Запрос с недостаточным количеством значений
 Запрос:
 ```
 curl -X POST 'http://localhost:8080/api/v1/calculate' 
@@ -317,7 +379,7 @@ expression is not valid. not enough values
 ```
 Код: `[422]`
 
-### 10. Запрос выражения по несуществующему ID
+### 12. Запрос выражения по несуществующему ID
 Запрос:
 ```
 curl 'http://localhost:8080/api/v1/expressions/12345'
